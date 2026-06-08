@@ -21,10 +21,11 @@ class MovingTruckBeam(Scene):
         beam_len = 6.6
 
         # Fixed Global Layout Scale Matrix (Prevents layout jumping)
-        Y_BEAM = 4.2
-        Y_INF  = 1.4
-        Y_SFD  = -1.4
-        Y_BMD  = -4.2
+        # Shifted coordinates down to provide a larger, cleaner gap below headers
+        Y_BEAM = 3.6
+        Y_INF  = 0.8
+        Y_SFD  = -2.0
+        Y_BMD  = -4.8
         
         # Scaling coefficients for stable visual sizing
         DEFLECTION_VISUAL_SCALE = 35.0
@@ -120,22 +121,23 @@ class MovingTruckBeam(Scene):
                 fill_color=accent_color, fill_opacity=1, stroke_width=0
             ).move_to([x0 - 0.25, center_y + 0.95, 0], aligned_edge=LEFT)
 
-            title_text = Text(label, color="#94A3B8", weight="BOLD").scale(0.18)
+            # Enlarged title text for readability
+            title_text = Text(label, color="#94A3B8", weight="BOLD").scale(0.24)
             title_text.move_to([x0 - 0.1, center_y + 0.95, 0], aligned_edge=LEFT)
             
             axis_line = Line([x0, center_y, 0], [x1, center_y, 0], color="#475569", stroke_width=1.5)
             return VGroup(frame, accent_tag, title_text, axis_line)
 
-        # Main Header (Shifted Down & Radiant Neon Aesthetics)
-        header_title = Text("LIVE LOAD FINITE ELEMENT METRICS", color="#00F2FF", weight="BOLD").scale(0.38)
-        header_sub = Text("REAL-TIME MOVING LOAD ANALYSIS", color="#FF007F").scale(0.22)
+        # Main Header (Enlarged Scales)
+        header_title = Text("LIVE LOAD FINITE ELEMENT METRICS", color="#00F2FF", weight="BOLD").scale(0.45)
+        header_sub = Text("REAL-TIME MOVING LOAD ANALYSIS", color="#FF007F").scale(0.28)
         
         header_title.to_edge(UP, buff=0.8) 
-        header_sub.next_to(header_title, DOWN, buff=0.1)
+        header_sub.next_to(header_title, DOWN, buff=0.15)
         self.add(header_title, header_sub)
 
-        # Watermark Label @ScanPintar (Vibrant Electric Cyan)
-        watermark = Text("@ScanPintar", color="#00F2FF", weight="BOLD").scale(0.25)
+        # Watermark Label @ScanPintar (Enlarged)
+        watermark = Text("@ScanPintar", color="#00F2FF", weight="BOLD").scale(0.30)
         watermark.to_corner(DR, buff=0.4)
         self.add(watermark)
 
@@ -176,8 +178,9 @@ class MovingTruckBeam(Scene):
             if max_def_mm > 0.1:
                 y_pos = Y_BEAM - max_def_m * DEFLECTION_VISUAL_SCALE
                 dot = Dot([sx(max_x), y_pos, 0], radius=0.04, color="#34D399")
-                lbl = Text(f"{max_def_mm:.1f} mm", color="#34D399", weight="BOLD").scale(0.14)
-                lbl.next_to(dot, DOWN, buff=0.08)
+                # Enlarged text
+                lbl = Text(f"{max_def_mm:.1f} mm", color="#34D399", weight="BOLD").scale(0.20)
+                lbl.next_to(dot, DOWN, buff=0.1)
                 return VGroup(dot, lbl)
             return VMobject()
 
@@ -190,7 +193,7 @@ class MovingTruckBeam(Scene):
         self.add(hinge, roller)
 
         # ==========================================================
-        # KINEMATIC VEHICLE BLUEPRINT ASSET (STRAIGHT HORIZONTAL)
+        # KINEMATIC VEHICLE BLUEPRINT ASSET
         # ==========================================================
         def draw_truck():
             g = VGroup()
@@ -234,13 +237,17 @@ class MovingTruckBeam(Scene):
                 g.add(wheel, center_dot)
 
                 if 0 <= axle_pos <= L:
+                    # Arrow length dynamically mapped to load value
+                    arrow_length = P * 0.01 
+                    
                     arrow = Arrow(
-                        [wheel_x, wheel_y + 1.2, 0],
+                        [wheel_x, wheel_y + 0.16 + arrow_length, 0],
                         [wheel_x, wheel_y + 0.16, 0],
                         buff=0, color="#EF4444", stroke_width=4, max_tip_length_to_length_ratio=0.15
                     )
-                    txt = Text(f"{P}k", color="#EF4444", weight="BOLD").scale(0.12)
-                    txt.next_to(arrow, UP, buff=0.04)
+                    # Enlarged text
+                    txt = Text(f"{P}k", color="#EF4444", weight="BOLD").scale(0.18)
+                    txt.next_to(arrow, UP, buff=0.06)
                     g.add(arrow, txt)
 
             return g
@@ -252,8 +259,9 @@ class MovingTruckBeam(Scene):
         # ==========================================================
         def render_reactions():
             RA, RB = reactions()
-            t1 = Text(f"RA = {RA:.1f} kN", color="#F59E0B", weight="BOLD").scale(0.16).move_to([x0 + 0.5, Y_BEAM - 0.45, 0])
-            t2 = Text(f"RB = {RB:.1f} kN", color="#F59E0B", weight="BOLD").scale(0.16).move_to([x1 - 0.5, Y_BEAM - 0.45, 0])
+            # Enlarged text
+            t1 = Text(f"RA = {RA:.1f} kN", color="#F59E0B", weight="BOLD").scale(0.22).move_to([x0 + 0.5, Y_BEAM - 0.45, 0])
+            t2 = Text(f"RB = {RB:.1f} kN", color="#F59E0B", weight="BOLD").scale(0.22).move_to([x1 - 0.5, Y_BEAM - 0.45, 0])
             return VGroup(t1, t2)
 
         self.add(stable_redraw(render_reactions))
@@ -274,8 +282,9 @@ class MovingTruckBeam(Scene):
             leading_x = loads[0][1]
             y_val = (1 - leading_x / L) * 0.8
             dot = Dot([sx(leading_x), Y_INF + y_val, 0], color="#F59E0B", radius=0.05)
-            val_lbl = Text(f"η = {1-(leading_x/L):.2f}", color="#F59E0B", weight="BOLD").scale(0.14)
-            val_lbl.next_to(dot, UP, buff=0.06)
+            # Enlarged text
+            val_lbl = Text(f"η = {1-(leading_x/L):.2f}", color="#F59E0B", weight="BOLD").scale(0.20)
+            val_lbl.next_to(dot, UP, buff=0.08)
             return VGroup(dot, val_lbl)
 
         self.add(stable_redraw(draw_influence_marker))
@@ -313,7 +322,8 @@ class MovingTruckBeam(Scene):
             p_idx = np.argmax([abs(v) for v in v_eval])
             if abs(v_eval[p_idx]) > 2.0:
                 dot = Dot([sx(xs_eval[p_idx]), Y_SFD + v_eval[p_idx] * SHEAR_SCALE, 0], radius=0.04, color="#FFFFFF")
-                lbl = Text(f"{v_eval[p_idx]:.1f} kN", color="#F8FAFC", weight="BOLD").scale(0.14)
+                # Enlarged text
+                lbl = Text(f"{v_eval[p_idx]:.1f} kN", color="#F8FAFC", weight="BOLD").scale(0.20)
                 lbl.next_to(dot, UP if v_eval[p_idx] >= 0 else DOWN, buff=0.08)
                 g.add(dot, lbl)
             return g
@@ -339,7 +349,8 @@ class MovingTruckBeam(Scene):
                 p_idx = np.argmax([abs(v) for v in vals])
                 if abs(vals[p_idx]) > 2.0:
                     dot = Dot([sx(nodes[p_idx]), Y_BMD + vals[p_idx] * MOMENT_SCALE, 0], radius=0.04, color="#FFFFFF")
-                    lbl = Text(f"{vals[p_idx]:.1f} kNm", color="#F8FAFC", weight="BOLD").scale(0.14)
+                    # Enlarged text
+                    lbl = Text(f"{vals[p_idx]:.1f} kNm", color="#F8FAFC", weight="BOLD").scale(0.20)
                     lbl.next_to(dot, UP if vals[p_idx] >= 0 else DOWN, buff=0.08)
                     g.add(dot, lbl)
             return g
