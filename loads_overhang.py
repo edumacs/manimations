@@ -15,6 +15,12 @@ class DiscretePositionBeam(Scene):
         # Crisp white workspace background
         self.camera.background_color = "#FFFFFF"
 
+        # ==========================================================
+        # AUDIO TRACK
+        # ==========================================================
+        # Ensure your audio file is in the same directory as this script.
+        self.add_sound("backsound.mp3")
+
         # Structural Properties
         L = 10.0           # Total length of the beam (m)
         L_s = 7.0          # Position of the right support (m) -> Creates a 3m overhang
@@ -27,10 +33,14 @@ class DiscretePositionBeam(Scene):
         Y_SFD  = -2.0
         Y_BMD  = -4.8
         
+        # Outer limits for vertical tracking lines
+        Y_TOP_ALIGN = 4.8
+        Y_BOTTOM_ALIGN = -6.0
+        
         # Scaling coefficients for stable visual sizing
         DEFLECTION_VISUAL_SCALE = 35.0
-        SHEAR_SCALE = 0.0025
-        MOMENT_SCALE = 0.0012
+        SHEAR_SCALE = 0.008
+        MOMENT_SCALE = 0.005
 
         x0 = -beam_len / 2
         x1 = beam_len / 2
@@ -157,14 +167,40 @@ class DiscretePositionBeam(Scene):
 
         # Watermark Label 
         watermark = Text("@ScanPintar", color="#64748B", weight="BOLD").scale(0.30)
-        watermark.to_corner(DR, buff=0.4)
+        watermark.next_to(header_sub, DOWN, buff=0.4)
         self.add(watermark)
 
-        # Accent colors chosen for readability against white
+        # Add background panels first
         self.add(create_plot_frame(Y_BEAM, "STRUCTURE DEFORMATION SYSTEM", "#16A34A"))
         self.add(create_plot_frame(Y_INF, "INFLUENCE LINE DESIGN MATRIX (RA)", "#D97706"))
         self.add(create_plot_frame(Y_SFD, "SHEAR FORCE DIAGRAM (SFD)", "#0284C7"))
         self.add(create_plot_frame(Y_BMD, "BENDING MOMENT DIAGRAM (BMD)", "#BE185D"))
+
+        # ==========================================================
+        # VERTICAL ALIGNMENT ARCHITECTURAL BLUEPRINT LINES
+        # ==========================================================
+        # Static structural lines: Left End/Support A, Right Support B, Right End
+        for x_val in [0, L_s, L]:
+            static_dash = DashedLine(
+                start=[sx(x_val), Y_TOP_ALIGN, 0],
+                end=[sx(x_val), Y_BOTTOM_ALIGN, 0],
+                color="#CBD5E1",
+                stroke_width=1.2,
+                dash_length=0.12
+            )
+            self.add(static_dash)
+
+        # Dynamic structural line tracking the switching load position
+        def draw_dynamic_load_tracker():
+            tx = truck_x.get_value()
+            return DashedLine(
+                start=[sx(tx), Y_TOP_ALIGN, 0],
+                end=[sx(tx), Y_BOTTOM_ALIGN, 0],
+                color="#EF4444",
+                stroke_width=1.5,
+                dash_length=0.08
+            )
+        self.add(stable_redraw(draw_dynamic_load_tracker))
 
         neutral_axis = DashedLine(
             start=[sx(0), Y_BEAM, 0], 
@@ -360,12 +396,34 @@ class DiscretePositionBeam(Scene):
         
         # Position 1: 1/4 from left side
         truck_x.set_value(L / 4)
-        self.wait(3.0)
+        self.wait(3.0, frozen_frame=False)
 
         # Position 2: 1/2 of the beam
         truck_x.set_value(L / 2)
-        self.wait(3.0)
+        self.wait(3.0, frozen_frame=False)
 
         # Position 3: At the end of overhang
         truck_x.set_value(L)
-        self.wait(3.0)
+        self.wait(3.0, frozen_frame=False)
+
+        # ==========================================================
+        # OUTRO SEQUENCE: LIKE, SHARE, & FOLLOW
+        # ==========================================================
+        
+        # 1. Clear updaters so objects don't redraw over the fade transition
+        for mob in self.mobjects:
+            mob.clear_updaters()
+
+        # 2. Fade out the entire structural diagram
+        self.play(*[FadeOut(mob) for mob in self.mobjects], run_time=1.0)
+        self.clear() # Failsafe to ensure a perfectly clean screen
+
+        # 3. Create crisp closing text groups
+        closing_primary = Text("Like & Share", color="#0369A1", weight="BOLD").scale(0.9)
+        closing_secondary = Text("Follow @ScanPintar", color="#BE123C", weight="BOLD").scale(0.7)
+        
+        outro_group = VGroup(closing_primary, closing_secondary).arrange(DOWN, buff=0.4)
+
+        # 4. Animate the Outro text
+        self.play(Write(outro_group), run_time=1.5)
+        self.wait(2.5)
