@@ -12,141 +12,118 @@ config.frame_width = 8
 
 class DiscretePositionBeam(Scene):
     def construct(self):
-        # Crisp white workspace background
         self.camera.background_color = "#FFFFFF"
 
         # ==========================================================
-        # AUDIO TRACK
+        # AUDIO TRACK (Optional Failsafe)
         # ==========================================================
         try:
             self.add_sound("backsound.mp3")
         except Exception:
             pass
 
-        # Structural Properties
+        # ==========================================================
+        # STRUCTURAL PROPERTIES
+        # ==========================================================
         L = 10.0           # Total length of the beam (m)
-        L_s = 7.0          # Position of the right support (m) -> Creates a 3m overhang
         EI = 2.4e5
         beam_len = 6.6     # Visual width scaling on screen
-
-        # Applied Loads
         q_load = 15.0      # Continuous Uniformly Distributed Load (UDL) in kN/m
         
-        # Configured for a heavy moving point load
-        axles = [
-            (80, 0.0),     # (Load kN, Distance from reference tracker m)
-        ]
+        # Dynamic Tracker: Right support starting at the right end (x = L)
+        support_B_x = ValueTracker(10.0)
 
-        # Fixed Global Layout Scale Matrix
+        # Global Layout Scale Matrix
         Y_BEAM = 3.6
         Y_INF  = 0.8
         Y_SFD  = -2.0
         Y_BMD  = -4.8
         
-        # Outer limits for vertical tracking lines
         Y_TOP_ALIGN = 4.8
         Y_BOTTOM_ALIGN = -6.0
         
-        # Scaling coefficients for stable visual sizing
-        DEFLECTION_VISUAL_SCALE = 45.0
-        SHEAR_SCALE = 0.008
-        MOMENT_SCALE = 0.005
+        # Visual scaling coefficients
+        DEFLECTION_VISUAL_SCALE = 65.0
+        SHEAR_SCALE = 0.012
+        MOMENT_SCALE = 0.006
 
         x0 = -beam_len / 2
         x1 = beam_len / 2
 
-        # ValueTracker initialized to the first position (1/4 from left)
-        truck_x = ValueTracker(L / 4)
-
-        # Coordinate Map: Structure x [0, L] -> Screen space [x0, x1]
         def sx(x):
             return x0 + beam_len * x / L
 
-        def active_loads():
-            out = []
-            for P, off in axles:
-                x = truck_x.get_value() + off
-                if 0 <= x <= L:
-                    out.append((P, x))
-            return out
-
+        # ==========================================================
+        # DYNAMIC STRUCTURAL MATH ENGINE (LEFT PINNED, RIGHT MOVES)
+        # ==========================================================
         def reactions():
-            loads = active_loads()
-            # Superposition: Moment about A due to Point Loads + UDL
-            M_udl = q_load * (L**2) / 2.0
-            M_point = sum(P * x for P, x in loads)
+            xB = support_B_x.get_value()
             
-            RB = (M_point + M_udl) / L_s
-            RA = sum(P for P, _ in loads) + (q_load * L) - RB
+            # Superposition: UDL over the entire beam [0, L]
+            # Sum M_A = 0 -> RB * xB - q_load * L * (L / 2.0) = 0
+            RB = (q_load * (L**2) / 2.0) / xB
+            RA = (q_load * L) - RB
             return RA, RB
 
         def shear(x):
+            xB = support_B_x.get_value()
             RA, RB = reactions()
+            
             v = 0
             eps = 1e-5 
             if x >= -eps:
                 v += RA
-            if x >= L_s - eps:
+            if x >= xB - eps:
                 v += RB
-            for P, xp in active_loads():
-                if x >= xp - eps:
-                    v -= P
             
-            # Subtract the distributed load up to point x
+            # Subtract the distributed load linearly
             v -= q_load * max(0.0, x)
             return v
 
         def moment(x):
+            xB = support_B_x.get_value()
             RA, RB = reactions()
+            
             m = 0
             if x > 0:
                 m += RA * x
-            if x > L_s:
-                m += RB * (x - L_s)
-            for P, xp in active_loads():
-                if x > xp:
-                    m -= P * (x - xp)
-            
+            if x > xB:
+                m += RB * (x - xB)
+                
             # Subtract the distributed load moment
             m -= q_load * (x**2) / 2.0
             return m
 
         def total_deflection(x):
-            loads = active_loads()
+            xB = support_B_x.get_value()
             RA, RB = reactions()
             
             def mac(val): return max(0.0, val)
             
-            # Calculate integration constant C1 from y(L_s) = 0 boundary condition
-            sum_P_term = sum(P * (mac(L_s - xp)**3) / 6.0 for P, xp in loads)
-            C1 = -((RA * (L_s**3) / 6.0) - sum_P_term - (q_load * (L_s**4) / 24.0)) / L_s
+            # Recalculate integration constants as boundary condition y(xB)=0 moves
+            C1 = (q_load * (xB**3) / 24.0) - (RA * (xB**2) / 6.0)
             
-            # Standard Macaulay Terms
             term_RA = RA * (x**3) / 6.0
-            term_RB = RB * (mac(x - L_s)**3) / 6.0
-            term_P = sum(-P * (mac(x - xp)**3) / 6.0 for P, xp in loads)
+            term_RB = RB * (mac(x - xB)**3) / 6.0
             term_udl = -q_load * (x**4) / 24.0
             
-            y = (term_RA + term_RB + term_P + term_udl + C1 * x) / EI
+            y = (term_RA + term_RB + term_udl + C1 * x) / EI
             return -y 
 
         # ==========================================================
-        # ULTRA-STABLE HIGH PERFORMANCE REDRAW ENGINE
+        # ULTRA-STABLE REDRAW WRAPPER (FIXED MULTIPLYING GEOMETRY)
         # ==========================================================
         def stable_redraw(func):
-            container = VGroup()
-            def updater(m):
-                m.submobjects.clear()
-                generated = func()
-                if isinstance(generated, VGroup):
-                    m.add(*generated.submobjects)
-                elif generated is not None:
-                    m.add(generated)
-            container.add_updater(updater)
-            return container
+            # Generate the first frame immediately to guarantee Frame 0 visibility
+            m = func()
+            def updater(mob):
+                # .become() entirely overwrites the Mobject, stopping the trailing ghost effect
+                mob.become(func())
+            m.add_updater(updater)
+            return m
 
         # ==========================================================
-        # MODERN COMPONENT UI FRAMES (LIGHT MODE)
+        # STATIC UI FRAMES & HEADERS
         # ==========================================================
         def create_plot_frame(center_y, label, accent_color):
             frame = RoundedRectangle(
@@ -166,59 +143,72 @@ class DiscretePositionBeam(Scene):
             axis_line = Line([x0, center_y, 0], [x1, center_y, 0], color="#94A3B8", stroke_width=1.5)
             return VGroup(frame, accent_tag, title_text, axis_line)
 
-        # Main Header
-        header_title = Text("STATIC LOAD FINITE ELEMENT METRICS", color="#0369A1", weight="BOLD").scale(0.45)
-        header_sub = Text("COMBINED CONTINUOUS & DISCRETE LOADS", color="#BE123C").scale(0.28)
+        header_title = Text("ANALISIS DUKUNGAN KINEMATIS DINAMIS", color="#0369A1", weight="BOLD").scale(0.40)
+        header_sub = Text("BEBAN MERATA KONTINU DENGAN KONDISI BATAS BERGERAK", color="#BE123C").scale(0.25)
         
         header_title.to_edge(UP, buff=0.8) 
         header_sub.next_to(header_title, DOWN, buff=0.15)
         self.add(header_title, header_sub)
 
-        # Watermark Label 
         watermark = Text("@ScanPintar", color="#64748B", weight="BOLD").scale(0.30)
         watermark.next_to(header_sub, DOWN, buff=0.4)
         self.add(watermark)
 
-        self.add(create_plot_frame(Y_BEAM, "STRUCTURE DEFORMATION SYSTEM", "#16A34A"))
-        self.add(create_plot_frame(Y_INF, "INFLUENCE LINE DESIGN MATRIX (RA)", "#D97706"))
-        self.add(create_plot_frame(Y_SFD, "SHEAR FORCE DIAGRAM (SFD)", "#0284C7"))
-        self.add(create_plot_frame(Y_BMD, "BENDING MOMENT DIAGRAM (BMD)", "#BE185D"))
+        self.add(create_plot_frame(Y_BEAM, "SISTEM DEFORMASI STRUKTUR", "#16A34A"))
+        self.add(create_plot_frame(Y_INF, "MATRIKS DESAIN GARIS PENGARUH (RA)", "#D97706"))
+        self.add(create_plot_frame(Y_SFD, "DIAGRAM GAYA GESER (SFD)", "#0284C7"))
+        self.add(create_plot_frame(Y_BMD, "DIAGRAM MOMEN LENTUR (BMD)", "#BE185D"))
 
         # ==========================================================
-        # VERTICAL ALIGNMENT ARCHITECTURAL BLUEPRINT LINES
+        # DYNAMIC ALIGNMENT LINES & SUPPORTS
         # ==========================================================
-        for x_val in [0, L_s, L]:
-            static_dash = DashedLine(
-                start=[sx(x_val), Y_TOP_ALIGN, 0],
-                end=[sx(x_val), Y_BOTTOM_ALIGN, 0],
-                color="#CBD5E1",
-                stroke_width=1.2,
-                dash_length=0.12
-            )
-            self.add(static_dash)
-
-        def draw_dynamic_load_tracker():
-            tx = truck_x.get_value()
-            return DashedLine(
-                start=[sx(tx), Y_TOP_ALIGN, 0],
-                end=[sx(tx), Y_BOTTOM_ALIGN, 0],
-                color="#EF4444",
+        def draw_alignment_lines():
+            xB = support_B_x.get_value()
+            g = VGroup()
+            
+            # Static Ends
+            for x_val in [0, L]:
+                dash = DashedLine(
+                    start=[sx(x_val), Y_TOP_ALIGN, 0],
+                    end=[sx(x_val), Y_BOTTOM_ALIGN, 0],
+                    color="#CBD5E1",
+                    stroke_width=1.2,
+                    dash_length=0.12
+                )
+                g.add(dash)
+                
+            # Dynamic Support B Line
+            dynamic_dash = DashedLine(
+                start=[sx(xB), Y_TOP_ALIGN, 0],
+                end=[sx(xB), Y_BOTTOM_ALIGN, 0],
+                color="#EF4444", 
                 stroke_width=1.5,
                 dash_length=0.08
             )
-        self.add(stable_redraw(draw_dynamic_load_tracker))
+            g.add(dynamic_dash)
+            return g
+
+        self.add(stable_redraw(draw_alignment_lines))
 
         neutral_axis = DashedLine(
             start=[sx(0), Y_BEAM, 0], 
             end=[sx(L), Y_BEAM, 0], 
-            color="#9CA3AF", 
-            stroke_width=1.5, 
-            dash_length=0.08
+            color="#9CA3AF", stroke_width=1.5, dash_length=0.08
         )
         self.add(neutral_axis)
 
+        def draw_supports():
+            xB = support_B_x.get_value()
+            g = VGroup()
+            hinge = Triangle(color="#1E293B", fill_color="#94A3B8", fill_opacity=1).scale(0.14).move_to([sx(0), Y_BEAM - 0.14, 0])
+            roller = Circle(color="#1E293B", fill_color="#94A3B8", fill_opacity=1).scale(0.08).move_to([sx(xB), Y_BEAM - 0.08, 0])
+            g.add(hinge, roller)
+            return g
+
+        self.add(stable_redraw(draw_supports))
+
         # ==========================================================
-        # STATIC UDL GRAPHICS (CONTINUOUS LOAD)
+        # STATIC UDL GRAPHICS
         # ==========================================================
         def generate_udl_graphics():
             udl_group = VGroup()
@@ -230,13 +220,12 @@ class DiscretePositionBeam(Scene):
             for i in range(num_arrows + 1):
                 x_pos = sx(i * (L / num_arrows))
                 arrow = Arrow(
-                    [x_pos, top_line_y, 0],
-                    [x_pos, Y_BEAM + 0.05, 0],
+                    [x_pos, top_line_y, 0], [x_pos, Y_BEAM + 0.05, 0],
                     buff=0, color="#0EA5E9", stroke_width=2, max_tip_length_to_length_ratio=0.25
                 )
                 udl_group.add(arrow)
             
-            lbl = Text(f"UDL: {q_load} kN/m", color="#0EA5E9", weight="BOLD").scale(0.2)
+            lbl = Text(f"BEBAN MERATA: {q_load} kN/m", color="#0EA5E9", weight="BOLD").scale(0.2)
             lbl.next_to(top_line, UP, buff=0.1)
             udl_group.add(lbl)
             return udl_group
@@ -244,203 +233,128 @@ class DiscretePositionBeam(Scene):
         self.add(generate_udl_graphics())
 
         # ==========================================================
-        # DYNAMIC DEFORMING STRUCTURAL ELEMENT
+        # DEFORMATION ENGINE
         # ==========================================================
         def draw_dynamic_beam():
-            xs = np.linspace(0, L, 80)
+            xs = np.linspace(0, L, 100)
             pts = [[sx(x), Y_BEAM - total_deflection(x) * DEFLECTION_VISUAL_SCALE, 0] for x in xs]
             curve = VMobject(color="#16A34A", stroke_width=5)
             curve.set_points_smoothly(pts)
             return curve
 
-        def draw_peak_deflection_label():
-            xs = np.linspace(0, L, 100)
-            defs = [total_deflection(x) for x in xs]
-            max_idx = np.argmax([abs(d) for d in defs]) 
-            max_x = xs[max_idx]
-            max_def_m = defs[max_idx]
-            max_def_mm = max_def_m * 1000 
-
-            if abs(max_def_mm) > 0.1:
-                y_pos = Y_BEAM - max_def_m * DEFLECTION_VISUAL_SCALE
-                dot = Dot([sx(max_x), y_pos, 0], radius=0.04, color="#15803D")
-                lbl = Text(f"{abs(max_def_mm):.1f} mm", color="#15803D", weight="BOLD").scale(0.20)
-                lbl.next_to(dot, DOWN if max_def_m > 0 else UP, buff=0.1)
-                return VGroup(dot, lbl)
-            return VMobject()
-
         self.add(stable_redraw(draw_dynamic_beam))
-        self.add(stable_redraw(draw_peak_deflection_label))
-
-        hinge = Triangle(color="#1E293B", fill_color="#94A3B8", fill_opacity=1).scale(0.14).move_to([sx(0), Y_BEAM - 0.14, 0])
-        roller = Circle(color="#1E293B", fill_color="#94A3B8", fill_opacity=1).scale(0.08).move_to([sx(L_s), Y_BEAM - 0.08, 0])
-        self.add(hinge, roller)
-
-        # ==========================================================
-        # KINEMATIC PEDESTRIAN POINT-LOAD ASSET
-        # ==========================================================
-        def draw_pedestrian_load():
-            g = VGroup()
-            t_x = truck_x.get_value()
-            
-            for P, off in axles:
-                axle_pos = t_x + off
-                if 0 <= axle_pos <= L:
-                    pos_x = sx(axle_pos)
-                    base_y = Y_BEAM
-                    
-                    head = Circle(radius=0.07, color="#2563EB", fill_color="#2563EB", fill_opacity=0.6, stroke_width=1.5).move_to([pos_x, base_y + 0.62, 0])
-                    torso = Line([pos_x, base_y + 0.55, 0], [pos_x, base_y + 0.32, 0], color="#2563EB", stroke_width=3)
-                    left_leg = Line([pos_x, base_y + 0.32, 0], [pos_x - 0.05, base_y + 0.12, 0], color="#2563EB", stroke_width=2.5)
-                    right_leg = Line([pos_x, base_y + 0.32, 0], [pos_x + 0.05, base_y + 0.12, 0], color="#2563EB", stroke_width=2.5)
-                    left_arm = Line([pos_x, base_y + 0.50, 0], [pos_x - 0.06, base_y + 0.35, 0], color="#2563EB", stroke_width=2)
-                    right_arm = Line([pos_x, base_y + 0.50, 0], [pos_x + 0.06, base_y + 0.35, 0], color="#2563EB", stroke_width=2)
-                    
-                    person = VGroup(head, torso, left_leg, right_leg, left_arm, right_arm)
-                    g.add(person)
-
-                    arrow = Arrow(
-                        [pos_x, base_y + 0.10 + (P * 0.01), 0],
-                        [pos_x, base_y + 0.10, 0],
-                        buff=0, color="#DC2626", stroke_width=4, max_tip_length_to_length_ratio=0.15
-                    )
-                    txt = Text(f"{P} kN", color="#DC2626", weight="BOLD").scale(0.18)
-                    txt.next_to(arrow, UP, buff=0.06)
-                    g.add(arrow, txt)
-
-            return g
-
-        self.add(stable_redraw(draw_pedestrian_load))
 
         def render_reactions():
+            xB = support_B_x.get_value()
             RA, RB = reactions()
             t1 = Text(f"RA = {RA:.1f} kN", color="#D97706", weight="BOLD").scale(0.22).move_to([sx(0), Y_BEAM - 0.45, 0])
-            t2 = Text(f"RB = {RB:.1f} kN", color="#D97706", weight="BOLD").scale(0.22).move_to([sx(L_s), Y_BEAM - 0.45, 0])
+            t2 = Text(f"RB = {RB:.1f} kN", color="#D97706", weight="BOLD").scale(0.22).move_to([sx(xB), Y_BEAM - 0.45, 0])
             return VGroup(t1, t2)
 
         self.add(stable_redraw(render_reactions))
 
         # ==========================================================
-        # INFLUENCE LINE TRACKING SYSTEM 
+        # INFLUENCE LINE TRACKING SYSTEM (DYNAMIC SHAPE)
         # ==========================================================
-        infl_pts = [
-            [sx(0), Y_INF, 0],
-            [sx(0), Y_INF + 0.8, 0],
-            [sx(L_s), Y_INF, 0],
-            [sx(L), Y_INF + 0.8 * (1 - L / L_s), 0],
-            [sx(L), Y_INF, 0],
-            [sx(0), Y_INF, 0]
-        ]
-        infl_poly = VMobject(fill_color="#D97706", fill_opacity=0.1, stroke_color="#D97706", stroke_width=1.5)
-        infl_poly.set_points_as_corners(infl_pts)
-        self.add(infl_poly)
+        def draw_influence_poly():
+            xB = support_B_x.get_value()
+            # Influence line for Reaction A due to a shifting support B
+            def eta(x): return (xB - x) / xB
+            
+            pts = [
+                [sx(0), Y_INF, 0],
+                [sx(0), Y_INF + eta(0)*0.8, 0],
+                [sx(xB), Y_INF + eta(xB)*0.8, 0],
+                [sx(L), Y_INF + eta(L)*0.8, 0],
+                [sx(L), Y_INF, 0],
+                [sx(0), Y_INF, 0]
+            ]
+            poly = VMobject(fill_color="#D97706", fill_opacity=0.1, stroke_color="#D97706", stroke_width=1.5)
+            poly.set_points_as_corners(pts)
+            return poly
 
-        def draw_influence_marker():
-            loads = active_loads()
-            if not loads: return VMobject()
-            leading_x = loads[0][1]
-            y_val = (1 - leading_x / L_s) * 0.8
-            dot = Dot([sx(leading_x), Y_INF + y_val, 0], color="#D97706", radius=0.05)
-            val_lbl = Text(f"η = {1-(leading_x/L_s):.2f}", color="#D97706", weight="BOLD").scale(0.20)
-            val_lbl.next_to(dot, UP if y_val >= 0 else DOWN, buff=0.08)
-            return VGroup(dot, val_lbl)
-
-        self.add(stable_redraw(draw_influence_marker))
+        self.add(stable_redraw(draw_influence_poly))
 
         # ==========================================================
         # ADVANCED CONTINUOUS DIAGRAM ENGINES
         # ==========================================================
         def create_sfd_diagram():
-            loads = active_loads()
-            nodes = [0, L_s, L] 
-            for _, xp in loads:
-                if 0 < xp < L:
-                    nodes.append(xp)
-            nodes = sorted(list(set(nodes)))
+            xB = support_B_x.get_value()
+            nodes = sorted(list(set([0.0, xB, L])))
+            clean_nodes = [nodes[0]]
+            for n in nodes[1:]:
+                if n - clean_nodes[-1] > 1e-3: clean_nodes.append(n)
+            nodes = clean_nodes
 
             outline_pts = []
-            v_eval = []
-            x_eval_pos = []
-            
             eps = 1e-5
             for i in range(len(nodes) - 1):
                 x_start, x_end = nodes[i], nodes[i+1]
-                
-                # UDL makes shear linear between nodes, so we only need start and end points
                 v_start = shear(x_start + eps)
                 v_end = shear(x_end - eps)
                 
                 outline_pts.append([sx(x_start), Y_SFD + v_start * SHEAR_SCALE, 0])
                 outline_pts.append([sx(x_end), Y_SFD + v_end * SHEAR_SCALE, 0])
                 
-                v_eval.extend([v_start, v_end])
-                x_eval_pos.extend([x_start, x_end])
-
             if not outline_pts: return VMobject()
 
             fill_pts = [[sx(0), Y_SFD, 0]] + outline_pts + [[sx(L), Y_SFD, 0]]
             fill_obj = VMobject(stroke_width=0, fill_color="#0284C7", fill_opacity=0.15).set_points_as_corners(fill_pts)
             line_obj = VMobject(color="#0284C7", stroke_width=2.5).set_points_as_corners(outline_pts)
-            g = VGroup(fill_obj, line_obj)
-
-            if v_eval:
-                p_idx = np.argmax([abs(v) for v in v_eval])
-                max_v = v_eval[p_idx]
-                if abs(max_v) > 2.0:
-                    dot = Dot([sx(x_eval_pos[p_idx]), Y_SFD + max_v * SHEAR_SCALE, 0], radius=0.04, color="#0F172A")
-                    lbl = Text(f"{max_v:.1f} kN", color="#0F172A", weight="BOLD").scale(0.20)
-                    lbl.next_to(dot, UP if max_v >= 0 else DOWN, buff=0.08)
-                    g.add(dot, lbl)
-            return g
+            return VGroup(fill_obj, line_obj)
 
         def create_bmd_diagram():
-            loads = active_loads()
-            nodes = [0, L_s, L]
-            for _, xp in loads:
-                if 0 < xp < L:
-                    nodes.append(xp)
-            nodes = sorted(list(set(nodes)))
+            xB = support_B_x.get_value()
+            nodes = sorted(list(set([0.0, xB, L])))
+            clean_nodes = [nodes[0]]
+            for n in nodes[1:]:
+                if n - clean_nodes[-1] > 1e-3: clean_nodes.append(n)
+            nodes = clean_nodes
 
             outline_pts = []
-            m_eval = []
-            x_eval_pos = []
-
             for i in range(len(nodes) - 1):
                 x_start, x_end = nodes[i], nodes[i+1]
-                # High resolution linspace to perfectly render the parabolic curves caused by the UDL
-                segment_xs = np.linspace(x_start, x_end, 25) 
-                
+                segment_xs = np.linspace(x_start, x_end, 30) 
                 for x in segment_xs:
-                    m = moment(x)
-                    outline_pts.append([sx(x), Y_BMD + m * MOMENT_SCALE, 0])
-                    m_eval.append(m)
-                    x_eval_pos.append(x)
+                    outline_pts.append([sx(x), Y_BMD + moment(x) * MOMENT_SCALE, 0])
 
             fill_pts = [[sx(0), Y_BMD, 0]] + outline_pts + [[sx(L), Y_BMD, 0]]
             fill_obj = VMobject(stroke_width=0, fill_color="#BE185D", fill_opacity=0.15).set_points_as_corners(fill_pts)
             line_obj = VMobject(color="#BE185D", stroke_width=2.5).set_points_as_corners(outline_pts)
-            g = VGroup(fill_obj, line_obj)
-
-            if m_eval:
-                p_idx = np.argmax([abs(v) for v in m_eval])
-                max_m = m_eval[p_idx]
-                if abs(max_m) > 2.0:
-                    dot = Dot([sx(x_eval_pos[p_idx]), Y_BMD + max_m * MOMENT_SCALE, 0], radius=0.04, color="#0F172A")
-                    lbl = Text(f"{max_m:.1f} kNm", color="#0F172A", weight="BOLD").scale(0.20)
-                    lbl.next_to(dot, UP if max_m >= 0 else DOWN, buff=0.08)
-                    g.add(dot, lbl)
-            return g
+            return VGroup(fill_obj, line_obj)
 
         self.add(stable_redraw(create_sfd_diagram))
         self.add(stable_redraw(create_bmd_diagram))
 
         # ==========================================================
-        # DISCRETE POSITION SWITCHING SEQUENCE
+        # ANIMATION SEQUENCE
         # ==========================================================
         
-        # Position 1: 1/4 from left side
-        truck_x.set_value(L / 4)
-        self.wait(3.0, frozen_frame=False)
+        # 1. Initial Frame Hold
+        self.wait(1.5, frozen_frame=False)
 
-        # Position 2: 1/2 of the beam
-        truck_x.set_value(L / 2)
+        # 2. Smoothly track Right Support inward towards Middle (L / 2.0 = 5.0)
+        self.play(
+            support_B_x.animate.set_value(L / 2.0), 
+            run_time=6.0, 
+            rate_func=smooth
+        )
+        
+        # 3. Final Frame Hold
+        self.wait(2.5, frozen_frame=False)
+
+        # ==========================================================
+        # OUTRO SEQUENCE
+        # ==========================================================
+        for mob in self.mobjects:
+            mob.clear_updaters()
+
+        self.play(*[FadeOut(mob) for mob in self.mobjects], run_time=1.0)
+        self.clear() 
+
+        closing_primary = Text("Suka & Bagikan", color="#0369A1", weight="BOLD").scale(0.9)
+        closing_secondary = Text("Ikuti @ScanPintar", color="#BE123C", weight="BOLD").scale(0.7)
+        outro_group = VGroup(closing_primary, closing_secondary).arrange(DOWN, buff=0.4)
+
+        self.play(Write(outro_group), run_time=1.5)
+        self.wait(2.5)
