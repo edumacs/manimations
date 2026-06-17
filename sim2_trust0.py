@@ -39,19 +39,19 @@ class TrussFEAMasterclass(Scene):
             if txt.width > 7.0:
                 txt.scale_to_fit_width(7.0)
                 
-            # Moved down to Y=4.3 to avoid colliding with the header
-            return VGroup(bg, txt).move_to([0, 4.3, 0])
+            # CHANGED: Lowered from 4.3 to 3.6 to widen the gap below subtitles
+            return VGroup(bg, txt).move_to([0, 3.4, 0])
 
         # ==========================================================
-        # EXACT CENTERED COORDINATE SYSTEM
+        # EXACT CENTERED COORDINATE SYSTEM (SHIFTED DOWN BY 1.2 Y)
         # ==========================================================
         n = {
-            "A": np.array([-2.75, -1.0, 0.0]),
-            "B": np.array([-0.75, -1.0, 0.0]),
-            "C": np.array([ 0.75, -1.0, 0.0]),
-            "D": np.array([ 2.75, -1.0, 0.0]),
-            "E": np.array([ 0.75,  1.0, 0.0]),
-            "F": np.array([-0.75,  1.0, 0.0])
+            "A": np.array([-2.75, -2.2, 0.0]),
+            "B": np.array([-0.75, -2.2, 0.0]),
+            "C": np.array([ 0.75, -2.2, 0.0]),
+            "D": np.array([ 2.75, -2.2, 0.0]),
+            "E": np.array([ 0.75, -0.2, 0.0]),
+            "F": np.array([-0.75, -0.2, 0.0])
         }
 
         # ==========================================================
@@ -93,26 +93,59 @@ class TrussFEAMasterclass(Scene):
 
         self.play(FadeIn(supports, shift=UP*0.5))
 
-        # 1d. Add Loads & Dimensions
-        arr_B = Arrow(start=n["B"]+UP*1.5, end=n["B"], color="#E11D48", stroke_width=6, buff=0.1)
-        txt_B = Text("11 kN", color="#E11D48", font_size=24, weight="BOLD").next_to(arr_B, UP, buff=0.1)
+        # 1d. Add Loads & Dimensions (Matching Source Image)
+        arr_B = Arrow(start=n["B"]+DOWN*0.1, end=n["B"]+DOWN*1.3, color="#E11D48", stroke_width=6, buff=0)
+        txt_B = Text("11 kN", color="#E11D48", font_size=24, weight="BOLD").next_to(arr_B, DOWN, buff=0.1)
         
-        arr_C = Arrow(start=n["C"]+UP*1.5, end=n["C"], color="#E11D48", stroke_width=6, buff=0.1)
-        txt_C = Text("22 kN", color="#E11D48", font_size=24, weight="BOLD").next_to(arr_C, UP, buff=0.1)
+        arr_C = Arrow(start=n["C"]+DOWN*0.1, end=n["C"]+DOWN*1.3, color="#E11D48", stroke_width=6, buff=0)
+        txt_C = Text("22 kN", color="#E11D48", font_size=24, weight="BOLD").next_to(arr_C, DOWN, buff=0.1)
         loads = VGroup(arr_B, txt_B, arr_C, txt_C)
 
-        dim_arr = DoubleArrow(start=n["A"]+DOWN*1.2, end=n["D"]+DOWN*1.2, color="#64748B", buff=0)
-        dim_txt = Text("Total L = 5.5 m", color="#64748B", font_size=20).next_to(dim_arr, DOWN, buff=0.1)
-        dims = VGroup(dim_arr, dim_txt)
+        # Build Detailed Dimensions
+        dim_color = "#64748B"
+        dim_stroke = 2
+        
+        # Horizontal Dimensions (Top)
+        dim_y = n["F"][1] + 1.0 # Height of horizontal dimension line
+        
+        # Horizontal Witness Lines
+        w_A = Line(n["A"]+UP*0.2, [n["A"][0], dim_y + 0.2, 0], color=dim_color, stroke_width=dim_stroke)
+        w_F = Line(n["F"]+UP*0.2, [n["F"][0], dim_y + 0.2, 0], color=dim_color, stroke_width=dim_stroke)
+        w_E = Line(n["E"]+UP*0.2, [n["E"][0], dim_y + 0.2, 0], color=dim_color, stroke_width=dim_stroke)
+        w_D = Line(n["D"]+UP*0.2, [n["D"][0], dim_y + 0.2, 0], color=dim_color, stroke_width=dim_stroke)
+
+        # Horizontal Arrows & Text
+        h_arr1 = DoubleArrow(start=[n["A"][0], dim_y, 0], end=[n["F"][0], dim_y, 0], color=dim_color, buff=0, stroke_width=dim_stroke+1)
+        h_txt1 = Text("2 m", color=dim_color, font_size=20).next_to(h_arr1, UP, buff=0.1)
+
+        h_arr2 = DoubleArrow(start=[n["F"][0], dim_y, 0], end=[n["E"][0], dim_y, 0], color=dim_color, buff=0, stroke_width=dim_stroke+1)
+        h_txt2 = Text("1.5 m", color=dim_color, font_size=20).next_to(h_arr2, UP, buff=0.1)
+
+        h_arr3 = DoubleArrow(start=[n["E"][0], dim_y, 0], end=[n["D"][0], dim_y, 0], color=dim_color, buff=0, stroke_width=dim_stroke+1)
+        h_txt3 = Text("2 m", color=dim_color, font_size=20).next_to(h_arr3, UP, buff=0.1)
+
+        # Vertical Dimension (Left)
+        dim_x = n["A"][0] - 1.2 # Position of vertical dimension line
+        
+        w_v_A = Line(n["A"]+LEFT*0.2, [dim_x - 0.2, n["A"][1], 0], color=dim_color, stroke_width=dim_stroke)
+        w_v_F = Line(n["F"]+LEFT*0.2, [dim_x - 0.2, n["F"][1], 0], color=dim_color, stroke_width=dim_stroke)
+        
+        v_arr = DoubleArrow(start=[dim_x, n["A"][1], 0], end=[dim_x, n["F"][1], 0], color=dim_color, buff=0, stroke_width=dim_stroke+1)
+        v_txt = Text("2 m", color=dim_color, font_size=20).next_to(v_arr, LEFT, buff=0.1)
+
+        dims = VGroup(
+            w_A, w_F, w_E, w_D, h_arr1, h_txt1, h_arr2, h_txt2, h_arr3, h_txt3,
+            w_v_A, w_v_F, v_arr, v_txt
+        )
 
         self.play(GrowArrow(arr_B), FadeIn(txt_B), GrowArrow(arr_C), FadeIn(txt_C))
         self.play(FadeIn(dims))
         self.wait(1.5)
 
-        # Scale down geometry for next steps
+        # Scale down geometry for next steps (Target center moved from [0, 2.5, 0] to [0, 1.2, 0])
         truss_system = VGroup(nodes_vgroup, node_labels, elements, supports, loads, dims)
         self.play(FadeOut(title1))
-        self.play(truss_system.animate.scale(0.65).move_to([0, 2.5, 0]))
+        self.play(truss_system.animate.scale(0.65).move_to([0, 1.2, 0]))
 
         # ==========================================================
         # SCENE 2: MATRIKS ELEMEN & PERAKITAN GLOBAL
@@ -120,7 +153,7 @@ class TrussFEAMasterclass(Scene):
         title2 = create_step_banner("2. DISKRITISASI & MATRIKS GLOBAL", "#0284C7")
         self.play(FadeIn(title2))
 
-        k_formula_title = Text("Matriks Kekakuan Elemen Lokal:", font_size=20, color="#64748B").move_to([0, 0.2, 0])
+        k_formula_title = Text("Matriks Kekakuan Elemen Lokal:", font_size=20, color="#64748B").move_to([0, -0.6, 0])
         
         k_math = MathTex(
             r"k^{e} = \frac{EA}{L}",
@@ -136,7 +169,7 @@ class TrussFEAMasterclass(Scene):
         self.play(elements[0].animate.set_color("#94A3B8").set_stroke(width=5))
         self.play(FadeOut(local_group))
 
-        assembly_title = Text("Perakitan Sistem Global: K u = F", font_size=24, color="#0F172A", weight="BOLD").move_to([0, 0.5, 0])
+        assembly_title = Text("Perakitan Sistem Global: K u = F", font_size=24, color="#0F172A", weight="BOLD").move_to([0, -0.3, 0])
         
         global_eq = MathTex(
             r"\begin{bmatrix} K_{1,1} & \cdots & K_{1,12} \\ \vdots & \ddots & \vdots \\ K_{12,1} & \cdots & K_{12,12} \end{bmatrix}",
@@ -160,7 +193,7 @@ class TrussFEAMasterclass(Scene):
         title3 = create_step_banner("3. SYARAT BATAS (BOUNDARY CONDITIONS)", "#BE185D")
         self.play(FadeIn(title3))
 
-        bc_desc = Text("Tumpuan dimasukkan untuk menghindari matriks singular.", font_size=18, color="#64748B").move_to([0, 0.8, 0])
+        bc_desc = Text("Tumpuan dimasukkan untuk menghindari matriks singular.", font_size=18, color="#64748B").move_to([0, -0.2, 0])
         self.play(FadeIn(bc_desc))
 
         global_eq_bc = MathTex(
@@ -178,8 +211,8 @@ class TrussFEAMasterclass(Scene):
         self.play(Flash(supA, color="#BE185D", line_length=0.3), Flash(rollerD, color="#BE185D", line_length=0.3))
         self.play(Transform(global_eq, global_eq_bc))
         
-        strike1 = Line(global_eq[0].get_left() + UP*0.6, global_eq[3].get_right() + UP*0.6, color="#BE185D", stroke_width=4)
-        strike2 = Line(global_eq[0].get_top() + LEFT*0.8, global_eq[0].get_bottom() + LEFT*0.8, color="#BE185D", stroke_width=4)
+        strike1 = Line(global_eq_bc[0].get_left() + UP*0.6, global_eq_bc[3].get_right() + UP*0.6, color="#BE185D", stroke_width=4)
+        strike2 = Line(global_eq_bc[0].get_top() + LEFT*0.8, global_eq_bc[0].get_bottom() + LEFT*0.8, color="#BE185D", stroke_width=4)
         
         self.play(Create(strike1), Create(strike2))
         self.wait(1.5)
@@ -197,28 +230,27 @@ class TrussFEAMasterclass(Scene):
 
         solve_math = MathTex(
             r"\{\mathbf{u}_{unknown}\} = [\mathbf{K}_{reduced}]^{-1} \{\mathbf{F}_{known}\}"
-        ).scale(1.1).move_to([0, -0.5, 0])
+        ).scale(1.1).move_to([0, -1.2, 0])
         solve_math.set_color_by_tex("u", "#16A34A").set_color_by_tex("K", "#0284C7").set_color_by_tex("F", "#E11D48")
         
         self.play(Write(solve_math))
         self.wait(1.5)
         self.play(FadeOut(solve_math))
 
-        # Restore Truss
-        self.play(truss_system.animate.scale(1/0.65).move_to([0, 1.2, 0]))
+        # Restore Truss (Target position lowered from [0, 1.2, 0] to [0, 0.2, 0])
+        self.play(truss_system.animate.scale(1/0.65).move_to([0, 0.2, 0]))
         self.play(FadeOut(dims), FadeOut(loads))
 
-        # Setup Legend
+        # Setup Legend (Shifted further down to avoid overlaps)
         legend_group = VGroup(
             VGroup(Dot(color="#0284C7", radius=0.1), Text("Compression (-) / Tekan", font_size=20, color="#0284C7")).arrange(RIGHT),
             VGroup(Dot(color="#E11D48", radius=0.1), Text("Tension (+) / Tarik", font_size=20, color="#E11D48")).arrange(RIGHT),
             VGroup(Arrow(start=DOWN*0.5, end=ORIGIN, color="#16A34A", buff=0), Text("Reactions / Reaksi", font_size=20, color="#16A34A")).arrange(RIGHT)
-        ).arrange(DOWN, aligned_edge=LEFT).move_to([0, -2.5, 0])
+        ).arrange(DOWN, aligned_edge=LEFT).move_to([0, -3.4, 0])
         
         self.play(FadeIn(legend_group))
 
-        # Engineering Physics Corrected Results: 
-        # CE is Tension (+22), BE is Compression (-5)
+        # Engineering Physics Corrected Results
         comp_keys = ["AF", "FE", "ED", "BE"] 
         tens_keys = ["AB", "BC", "CD", "BF", "CE"]
         
