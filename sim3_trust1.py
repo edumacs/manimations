@@ -36,7 +36,7 @@ class TrussFEAMasterclass(Scene):
             txt = Text(text, color=color, weight="BOLD", font_size=22)
             if txt.width > 7.0:
                 txt.scale_to_fit_width(7.0)
-            return VGroup(bg, txt).move_to([0, 3.6, 0])
+            return VGroup(bg, txt).move_to([0, 3.8, 0])
 
         # ==========================================================
         # EXACT COORDINATE SYSTEM (BASED ON ATTACHED IMAGE)
@@ -153,7 +153,7 @@ class TrussFEAMasterclass(Scene):
 
         # 2b. Derivation Example (NEW ADDITION)
         deriv_title = Text("Contoh Derivasi: Elemen A-B", font_size=22, color="#0F172A", weight="BOLD").move_to([0, 0.4, 0])
-        deriv_params = MathTex(r"L = 1.5\text{ m}, \quad \theta = 0^\circ \implies c=1, \ s=0").scale(0.8).next_to(deriv_title, DOWN, buff=0.2)
+        deriv_params = MathTex(r"L = 1.5\text{ m}, \quad \theta = 0^\circ \implies c=1, \ s=0").scale(0.8).next_to(deriv_title, DOWN*0.5, buff=0.2)
         deriv_params.set_color("#64748B")
 
         k_ab_math = MathTex(
@@ -294,8 +294,8 @@ class TrussFEAMasterclass(Scene):
         self.play(FadeIn(force_labels))
 
         # Add Computed Reaction Forces
-        RA_post = Arrow(start=n["A"]+DOWN*0.8, end=n["A"]+DOWN*0.2, color="#16A34A", stroke_width=8, buff=0)
-        RE_post = Arrow(start=n["E"]+DOWN*0.8, end=n["E"]+DOWN*0.2, color="#16A34A", stroke_width=8, buff=0)
+        RA_post = Arrow(start=n["A"]+DOWN*0.6, end=n["A"]+DOWN*0.1, color="#16A34A", stroke_width=8, buff=0)
+        RE_post = Arrow(start=n["E"]+DOWN*0.6, end=n["E"]+DOWN*0.1, color="#16A34A", stroke_width=8, buff=0)
         
         txt_RA = Text("16.75 kN", color="#16A34A", font_size=20, weight="BOLD").next_to(RA_post, RIGHT, buff=0.1)
         txt_RE = Text("20.25 kN", color="#16A34A", font_size=20, weight="BOLD").next_to(RE_post, LEFT, buff=0.1)
